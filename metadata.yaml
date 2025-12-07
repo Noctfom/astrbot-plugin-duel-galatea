@@ -1,0 +1,6 @@
+name: duel_galatea
+display_name: 游戏王工具箱
+desc: 一个游戏王全能工具箱,基于百鸽API提供游戏王卡片查询，卡图下载功能，基于duelmeta网站对当期DL/MD T表进行查询，并返回关键卡片，查询ROTK网站爬取当期OCG饼图和示例卡组,提供随机一卡，发动王牌圣杯等娱乐功能
+version: 1.2.0
+author: Noctfom
+repo: https://github.com/Noctfom/astrbot-plugin-duel-galatea
