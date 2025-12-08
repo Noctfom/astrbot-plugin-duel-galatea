@@ -264,10 +264,11 @@ class DuelGalateaPlugin(Star):
         # 加载ID (从源码目录读取)
         self._load_card_ids()
 
-    def terminate(self):
+    async def terminate(self): # <--- 必须加 async
         """插件卸载/关闭时的清理工作"""
         # 关闭 aiohttp session
-        asyncio.create_task(self.card_searcher.close())
+        if self.card_searcher:
+            await self.card_searcher.close() # <--- 直接 await，确保资源释放
 
     def _load_card_ids(self):
         """加载纯ID列表到内存"""
