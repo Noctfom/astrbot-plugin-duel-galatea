@@ -4,12 +4,11 @@ import json
 import aiohttp
 import asyncio
 import re
-import time
 import html
-from io import BytesIO
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Tuple
 import urllib.parse
 from astrbot.api.all import logger
+
 
 class DeckBreakdownManager:
     # 新增 ydk_manager 参数
@@ -17,7 +16,7 @@ class DeckBreakdownManager:
         self.data_dir = data_dir
         self.plugin_dir = plugin_dir
         self.ydk_manager = ydk_manager  # 保存实例
-        
+
         # 2. 下面的文件全部改用 self.data_dir
         self.deck_trans_file = os.path.join(self.data_dir, "deck_translations.json")
         self.card_cache_file = os.path.join(self.data_dir, "card_cache.json")
@@ -219,7 +218,9 @@ class DeckBreakdownManager:
 
         return main_list, extra_list
 
-    async def fetch_deck_breakdown(self, query_name: str, game_type_input, session_id: str) -> Dict:
+    async def fetch_deck_breakdown(
+        self, query_name: str, game_type_input, session_id: str
+    ) -> Dict:
         is_dl = False
         if hasattr(game_type_input, "value"):
             is_dl = game_type_input.value == "dl"
@@ -307,7 +308,7 @@ class DeckBreakdownManager:
 
                 # --- 2. 核心抓取逻辑 (目标：获取 m_list 和 e_list) ---
                 m_list, e_list = [], []
-                source_info = "" # 用于记录来源信息
+                source_info = ""  # 用于记录来源信息
 
                 # A. API (Top Decks) 优先尝试
                 slug_variants = [
@@ -318,8 +319,9 @@ class DeckBreakdownManager:
                 api_base = f"https://{domain}/api/v1/top-decks"
 
                 for variant in slug_variants:
-                    if m_list or e_list: break # 如果已经抓到了，就跳出
-                    
+                    if m_list or e_list:
+                        break  # 如果已经抓到了，就跳出
+
                     api_target = f"{api_base}?deckType={variant}&pageSize=1&sort=date"
                     try:
                         logger.info(f"DeckBreakdown: API Try: {api_target}")
@@ -327,9 +329,15 @@ class DeckBreakdownManager:
                             if api_resp.status == 200:
                                 data = await api_resp.json()
                                 if data and len(data) > 0:
-                                    m_list, e_list = self._extract_cards_from_api_obj(data[0])
+                                    m_list, e_list = self._extract_cards_from_api_obj(
+                                        data[0]
+                                    )
                                     if m_list:
-                                        author = data[0].get("author", {}).get("username", "Unknown")
+                                        author = (
+                                            data[0]
+                                            .get("author", {})
+                                            .get("username", "Unknown")
+                                        )
                                         source_info = f"最新上位 ({author}) [API]"
                     except Exception as ex:
                         debug_msg.append(f"API Error: {ex}")
@@ -342,30 +350,34 @@ class DeckBreakdownManager:
                         source_info = "页面示例 (Sample Deck)"
                     else:
                         # 抓取失败或数量太少，视为无效
-                        m_list, e_list = [], [] 
-                        debug_msg.append(f"Local parse < 10 cards")
+                        m_list, e_list = [], []
+                        debug_msg.append("Local parse < 10 cards")
 
                 # C. 兜底 (使用核心卡作为参考)
                 if (not m_list and not e_list) and core_unique_cards:
                     debug_msg.append("Fallback Core")
                     source_info = "核心统计(无复数)"
-                    
+
                     # 异步获取类型信息进行分拣
                     tasks = [self.get_card_info(session, c) for c in core_unique_cards]
                     infos = await asyncio.gather(*tasks)
 
                     for c, info in zip(core_unique_cards, infos):
                         _, _, is_e = info
-                        if is_e: e_list.append(c)
-                        else: m_list.append(c)
+                        if is_e:
+                            e_list.append(c)
+                        else:
+                            m_list.append(c)
 
                 # --- 3. 后处理：转 ID -> 保存 YDK -> 绘图 ---
-                
+
                 # 如果依然为空，说明彻底失败
                 if not m_list and not e_list:
-                    text_msg += f"\n\n❌ 未找到有效卡组配置 [Debug: {'; '.join(debug_msg)}]"
+                    text_msg += (
+                        f"\n\n❌ 未找到有效卡组配置 [Debug: {'; '.join(debug_msg)}]"
+                    )
                     return {"text": text_msg, "image_path": None}
-                
+
                 text_msg += f"\n\n📜 来源: {source_info}"
                 text_msg += "\n🔄 正在转换卡密并生成文件..."
 
@@ -373,27 +385,27 @@ class DeckBreakdownManager:
                 unique_names = list(set(m_list + e_list))
                 tasks = [self.get_card_info(session, name) for name in unique_names]
                 results = await asyncio.gather(*tasks)
-                
-               # ... (前面的 gathering results 不变) ...
+
+                # ... (前面的 gathering results 不变) ...
 
                 name_to_id = {}
-                id_to_is_extra = {} # 新增：记录 ID 是否属于额外卡组
-                
+                id_to_is_extra = {}  # 新增：记录 ID 是否属于额外卡组
+
                 for name, res in zip(unique_names, results):
                     # res: (cn_name, card_id, is_extra)
-                    if res[1]: 
+                    if res[1]:
                         name_to_id[name] = res[1]
-                        id_to_is_extra[res[1]] = res[2] # 记录是否为额外
+                        id_to_is_extra[res[1]] = res[2]  # 记录是否为额外
 
                 # 1. 先把所有识别出来的 ID 混在一起
                 raw_m_ids = [name_to_id.get(n) for n in m_list if name_to_id.get(n)]
                 raw_e_ids = [name_to_id.get(n) for n in e_list if name_to_id.get(n)]
                 all_ids = raw_m_ids + raw_e_ids
-                
+
                 # 2. 重新分配 (二次清洗)
                 m_ids = []
                 e_ids = []
-                
+
                 for cid in all_ids:
                     # 如果 API 说是额外(is_extra=True)，就强制塞进额外，不管它原来在哪
                     if id_to_is_extra.get(cid, False):
@@ -402,16 +414,22 @@ class DeckBreakdownManager:
                         m_ids.append(cid)
                 # 3.2 保存 YDK
                 ydk_path = self.ydk_manager.save_ydk(m_ids, e_ids, [], session_id)
-                
+
                 # 3.3 绘图
                 if ydk_path:
                     text_msg += "\n🎨 正在绘制预览图..."
-                    image_path = await self.ydk_manager.draw_deck_image(session_id, display_name)
+                    image_path = await self.ydk_manager.draw_deck_image(
+                        session_id, display_name
+                    )
                 else:
                     text_msg += "\n⚠️ YDK 文件生成失败"
 
-                return {"text": text_msg, "image_path": image_path, "ydk_path": ydk_path}
+                return {
+                    "text": text_msg,
+                    "image_path": image_path,
+                    "ydk_path": ydk_path,
+                }
 
         except Exception as e:
-            logger.error(f"DeckBreakdown Error: {e}") # 新增日志
+            logger.error(f"DeckBreakdown Error: {e}")  # 新增日志
             return {"text": f"Error: {str(e)}"}
