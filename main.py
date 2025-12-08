@@ -831,8 +831,8 @@ class DuelGalateaPlugin(Star):
 
     @filter.command("接收ydk文本", alias=["/接收ydk文本"])
     async def handle_receive_ydk(self, event: AstrMessageEvent):
-        session_id = self._get_session_id(event)
         """接收 YDK 文本并更新缓存"""
+        session_id = self._get_session_id(event)
         text = event.get_message_str().strip()
         # 去掉指令部分
         parts = text.split("\n", 1)
@@ -858,8 +858,8 @@ class DuelGalateaPlugin(Star):
         "接收卡组链接", alias=["/接收卡组链接", "解析卡组链接", "/解析卡组链接"]
     )
     async def handle_receive_deck_link(self, event: AstrMessageEvent):
-        session_id = self._get_session_id(event)
         """解析 ourocg/ygo 卡组链接 或 YDKe 代码并转化为ydk文件缓存"""
+        session_id = self._get_session_id(event)
         text = event.get_message_str().strip()
         parts = text.split()
         url = parts[1] if len(parts) > 1 else text  # 兼容两种输入方式
