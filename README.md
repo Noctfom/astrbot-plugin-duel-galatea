@@ -1,6 +1,6 @@
 # Duel Galatea - 游戏王全能插件
 
-![版本](https://img.shields.io/badge/版本-1.2.0-brightgreen)
+![版本](https://img.shields.io/badge/版本-1.3.0-brightgreen)
 ![AstrBot](https://img.shields.io/badge/AstrBot-v4.0+-blue)
 
 ## 🌟 插件简介
@@ -100,6 +100,21 @@ Duel Galatea是一个游☆戏☆王全能插件，能够基于百鸽API提供�
 /OCG饼图
 ```
 
+### 构筑相关(1.3.0)已完成会话隔离，ydk缓存文件各个群聊/用户独立
+```
+// 发送缓存的ydk文件(支持查卡组指令的):
+/发送ydk
+
+// 发送缓存ydk文件的卡组图片:
+/发送卡组图片
+
+// 接收ydk文本内容作为缓存:
+/接收ydk文本
+
+// 接收ourocg链接或者ydke链接转化为ydk缓存:
+/接收卡组链接
+```
+
 ### 用撅斗带来笑容（
 ```
 // 最强的决斗者一切都是必然的:
@@ -123,9 +138,15 @@ Duel Galatea是一个游☆戏☆王全能插件，能够基于百鸽API提供�
 - aiohttp (用于API调用)
 - Pillow (用于生成卡组图片)
 
+## 更新日志
+v1.0.0 完成查卡组件
+v1.1.0 添加娱乐功能，duelmeta爬取
+v1.2.0 全面使用aiohttp改写，添加rotk爬取
+v1.3.0 修改缓存文件存储位置，添加ydk读取功能
+
 ## 📞 支持与反馈
 
-如有问题，请联系开发者qq：2721298904，加入交流群635990103（快来玩！）或提交Issue。
+如有问题或建议，请联系开发者qq：2721298904，加入交流群635990103（快来玩！）或提交Issue。
 
 同时感谢Astrbot开源项目！！！
 

@@ -9,21 +9,19 @@ import html
 from io import BytesIO
 from typing import List, Dict, Optional, Tuple
 import urllib.parse
-
-try:
-    from PIL import Image, ImageDraw, ImageFont
-
-    HAS_PILLOW = True
-except ImportError:
-    HAS_PILLOW = False
-
+from astrbot.api.all import logger
 
 class DeckBreakdownManager:
-    def __init__(self, plugin_path: str):
-        self.plugin_path = plugin_path
-        self.deck_trans_file = os.path.join(plugin_path, "deck_translations.json")
-        self.card_cache_file = os.path.join(plugin_path, "card_cache.json")
-        self.images_dir = os.path.join(plugin_path, "temp_images")
+    # 新增 ydk_manager 参数
+    def __init__(self, data_dir: str, plugin_dir: str, ydk_manager):
+        self.data_dir = data_dir
+        self.plugin_dir = plugin_dir
+        self.ydk_manager = ydk_manager  # 保存实例
+        
+        # 2. 下面的文件全部改用 self.data_dir
+        self.deck_trans_file = os.path.join(self.data_dir, "deck_translations.json")
+        self.card_cache_file = os.path.join(self.data_dir, "card_cache.json")
+        self.images_dir = os.path.join(self.data_dir, "temp_images")
 
         if not os.path.exists(self.images_dir):
             os.makedirs(self.images_dir)
@@ -45,7 +43,7 @@ class DeckBreakdownManager:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"Save failed {path}: {e}")
+            logger.error(f"Save failed {path}: {e}")
 
     async def get_card_info(
         self, session: aiohttp.ClientSession, english_name: str
@@ -123,173 +121,6 @@ class DeckBreakdownManager:
             if query in cn:
                 return en, f"{cn} ({en})"
         return query, query
-
-    async def _download_card_image(
-        self, session: aiohttp.ClientSession, card_id: str
-    ) -> Optional[Image.Image]:
-        if not card_id:
-            return None
-        url = f"https://cdn.233.momobako.com/ygopro/pics/{card_id}.jpg!thumb2"
-        try:
-            async with session.get(url, timeout=10) as resp:
-                if resp.status == 200:
-                    data = await resp.read()
-                    return Image.open(BytesIO(data))
-        except:
-            pass
-        return None
-
-    # --- 绘图逻辑 (智能字体加载) ---
-    async def generate_full_deck_view(
-        self,
-        deck_name: str,
-        main_deck_list: List[str],
-        extra_deck_list: List[str],
-        game_type_str: str,
-        source_type: str = "Sample",
-    ) -> Optional[str]:
-        if not HAS_PILLOW:
-            return None
-        print(
-            f"🎨 绘制: {deck_name} (Main:{len(main_deck_list)} Extra:{len(extra_deck_list)})"
-        )
-
-        unique_cards = set(main_deck_list + extra_deck_list)
-        card_id_map = {}
-
-        headers = {"User-Agent": "Mozilla/5.0"}
-        async with aiohttp.ClientSession(headers=headers) as session:
-            tasks = [self.get_card_info(session, c) for c in unique_cards]
-            results = await asyncio.gather(*tasks)
-
-            for c_name, res in zip(unique_cards, results):
-                _, cid, _ = res
-                if cid:
-                    card_id_map[c_name] = cid
-
-            download_tasks = []
-            download_cids = []
-            for c_name in unique_cards:
-                cid = card_id_map.get(c_name)
-                if cid:
-                    download_tasks.append(self._download_card_image(session, cid))
-                    download_cids.append(cid)
-
-            images_data = await asyncio.gather(*download_tasks)
-
-            images_cache = {}
-            for cid, img in zip(download_cids, images_data):
-                if img:
-                    images_cache[cid] = img
-
-        if not images_cache:
-            return None
-
-        try:
-            card_w, card_h, gap, cols = 82, 120, 4, 10
-            main_rows = (
-                (len(main_deck_list) + cols - 1) // cols if main_deck_list else 0
-            )
-            extra_rows = (
-                (len(extra_deck_list) + cols - 1) // cols if extra_deck_list else 0
-            )
-            header_h, section_gap = 40, 20
-            total_h = (
-                header_h
-                + (main_rows * (card_h + gap))
-                + section_gap
-                + (extra_rows * (card_h + gap))
-                + 20
-            )
-            total_w = max((card_w + gap) * cols + gap, 600)
-
-            canvas = Image.new("RGB", (total_w, total_h), (25, 25, 30))
-            draw = ImageDraw.Draw(canvas)
-
-            # --- 智能字体加载逻辑 (支持 .otf, .ttf, .ttc) ---
-            title_font = None
-            count_font = None
-
-            # 1. 扫描插件目录下所有的字体文件
-            font_path = None
-            valid_extensions = {".ttf", ".ttc", ".otf"}  # 支持 OTF
-
-            # 优先查找列表
-            priority_files = [
-                "msyh.ttc",
-                "msyh.ttf",
-                "SourceHanSansSC-Regular.otf",
-                "simhei.ttf",
-            ]
-
-            # 先找优先列表里的
-            for f in priority_files:
-                p = os.path.join(self.plugin_path, f)
-                if os.path.exists(p):
-                    font_path = p
-                    break
-
-            # 如果没找到，扫描整个目录找任意一个字体
-            if not font_path:
-                for filename in os.listdir(self.plugin_path):
-                    if os.path.splitext(filename)[1].lower() in valid_extensions:
-                        font_path = os.path.join(self.plugin_path, filename)
-                        break
-
-            # 加载字体
-            if font_path:
-                try:
-                    title_font = ImageFont.truetype(font_path, 24)
-                    count_font = ImageFont.truetype(font_path, 18)
-                    print(f"✅ Loaded font: {os.path.basename(font_path)}")
-                except Exception as e:
-                    print(f"⚠️ Font load error: {e}")
-
-            # 2. 兜底：如果还是没找到，使用默认
-            if title_font is None:
-                print("⚠️ No font found, using default (Chinese may fail)")
-                title_font = ImageFont.load_default()
-                count_font = ImageFont.load_default()
-            # ------------------
-
-            site_prefix = "DLM" if game_type_str == "dl" else "MDM"
-            title_text = f"{site_prefix} {source_type}: {deck_name}"
-            draw.text((10, 8), title_text, font=title_font, fill=(255, 255, 255))
-            draw.text(
-                (total_w - 200, 12),
-                f"Main:{len(main_deck_list)} / Extra:{len(extra_deck_list)}",
-                font=count_font,
-                fill=(200, 200, 200),
-            )
-
-            def draw_section(card_list, start_y):
-                for i, c_name in enumerate(card_list):
-                    cid = card_id_map.get(c_name)
-                    if cid and cid in images_cache:
-                        row, col = i // cols, i % cols
-                        x = gap + col * (card_w + gap)
-                        y = start_y + row * (card_h + gap)
-                        canvas.paste(images_cache[cid], (x, y))
-                return start_y + ((len(card_list) + cols - 1) // cols) * (card_h + gap)
-
-            next_y = draw_section(main_deck_list, header_h)
-            draw.line(
-                [
-                    (gap, next_y + section_gap / 2),
-                    (total_w - gap, next_y + section_gap / 2),
-                ],
-                fill=(60, 60, 60),
-                width=2,
-            )
-            draw_section(extra_deck_list, next_y + section_gap)
-
-            output_filename = f"{deck_name}_{int(time.time())}.jpg"
-            output_path = os.path.join(self.images_dir, output_filename)
-            canvas.save(output_path, quality=90)
-            return os.path.abspath(output_path)
-        except Exception as e:
-            print(f"Draw error: {e}")
-            return None
 
     def _extract_cards_from_api_obj(
         self, deck_obj: Dict
@@ -388,7 +219,7 @@ class DeckBreakdownManager:
 
         return main_list, extra_list
 
-    async def fetch_deck_breakdown(self, query_name: str, game_type_input) -> Dict:
+    async def fetch_deck_breakdown(self, query_name: str, game_type_input, session_id: str) -> Dict:
         is_dl = False
         if hasattr(game_type_input, "value"):
             is_dl = game_type_input.value == "dl"
@@ -410,7 +241,7 @@ class DeckBreakdownManager:
                 # 1. 抓取文字版主页 (为了获取 Sample Deck 的位置和 skill)
                 # URL 必须手动编码
                 page_url = f"https://{domain}/tier-list/deck-types/{urllib.parse.quote(deck_slug)}"
-                print(f"Fetching Page: {page_url}")
+                logger.info(f"Fetching Page: {page_url}")
 
                 async with session.get(page_url, timeout=15) as resp:
                     if resp.status == 404:
@@ -474,11 +305,11 @@ class DeckBreakdownManager:
 
                 text_msg += f"\n🔗 {domain}页面: {page_url}"
 
-                # --- 2. 图片生成 ---
-                image_path = None
+                # --- 2. 核心抓取逻辑 (目标：获取 m_list 和 e_list) ---
+                m_list, e_list = [], []
+                source_info = "" # 用于记录来源信息
 
-                # A. API (Top Decks)
-                # 尝试多种编码方式，直到成功
+                # A. API (Top Decks) 优先尝试
                 slug_variants = [
                     deck_slug,
                     urllib.parse.quote(deck_slug),
@@ -487,77 +318,100 @@ class DeckBreakdownManager:
                 api_base = f"https://{domain}/api/v1/top-decks"
 
                 for variant in slug_variants:
-                    if image_path:
-                        break
-                    # 直接拼接 URL，防止 requests/aiohttp 的 params 自动编码导致 double encoding
+                    if m_list or e_list: break # 如果已经抓到了，就跳出
+                    
                     api_target = f"{api_base}?deckType={variant}&pageSize=1&sort=date"
-
                     try:
-                        print(f"🔍 API Try: {api_target}")
+                        logger.info(f"DeckBreakdown: API Try: {api_target}")
                         async with session.get(api_target, timeout=10) as api_resp:
                             if api_resp.status == 200:
                                 data = await api_resp.json()
                                 if data and len(data) > 0:
-                                    m, e = self._extract_cards_from_api_obj(data[0])
-                                    if m:
-                                        image_path = await self.generate_full_deck_view(
-                                            display_name,
-                                            m,
-                                            e,
-                                            game_type_str,
-                                            "最新上位(API)",
-                                        )
-                                        author = (
-                                            data[0]
-                                            .get("author", {})
-                                            .get("username", "Unknown")
-                                        )
-                                        text_msg += (
-                                            f"\n\n📜 来源: 最新上位 ({author}) [API]"
-                                        )
+                                    m_list, e_list = self._extract_cards_from_api_obj(data[0])
+                                    if m_list:
+                                        author = data[0].get("author", {}).get("username", "Unknown")
+                                        source_info = f"最新上位 ({author}) [API]"
                     except Exception as ex:
                         debug_msg.append(f"API Error: {ex}")
 
                 # B. 原地 HTML 解析 (如果 API 失败)
-                if not image_path and sample_idx != -1:
+                if (not m_list and not e_list) and sample_idx != -1:
                     sample_area = content[sample_idx:]
-                    m, e = self._parse_html_sample(sample_area)
-                    if len(m) > 10:
-                        image_path = await self.generate_full_deck_view(
-                            display_name, m, e, game_type_str, "页面示例"
-                        )
-                        text_msg += "\n\n📜 来源: 页面示例 (Sample Deck)"
+                    m_list, e_list = self._parse_html_sample(sample_area)
+                    if len(m_list) > 10:
+                        source_info = "页面示例 (Sample Deck)"
                     else:
-                        debug_msg.append(f"Local parse < 10 cards (got {len(m)})")
+                        # 抓取失败或数量太少，视为无效
+                        m_list, e_list = [], [] 
+                        debug_msg.append(f"Local parse < 10 cards")
 
-                # C. 兜底
-                if not image_path and core_unique_cards:
+                # C. 兜底 (使用核心卡作为参考)
+                if (not m_list and not e_list) and core_unique_cards:
                     debug_msg.append("Fallback Core")
-                    fb_main, fb_extra = [], []
+                    source_info = "核心统计(无复数)"
+                    
                     # 异步获取类型信息进行分拣
                     tasks = [self.get_card_info(session, c) for c in core_unique_cards]
                     infos = await asyncio.gather(*tasks)
 
                     for c, info in zip(core_unique_cards, infos):
                         _, _, is_e = info
-                        if is_e:
-                            fb_extra.append(c)
-                        else:
-                            fb_main.append(c)
+                        if is_e: e_list.append(c)
+                        else: m_list.append(c)
 
-                    image_path = await self.generate_full_deck_view(
-                        display_name,
-                        fb_main,
-                        fb_extra,
-                        game_type_str,
-                        "核心统计(无复数)",
-                    )
-                    text_msg += "\n\n🖼️ 图片来源: 核心统计兜底"
+                # --- 3. 后处理：转 ID -> 保存 YDK -> 绘图 ---
+                
+                # 如果依然为空，说明彻底失败
+                if not m_list and not e_list:
+                    text_msg += f"\n\n❌ 未找到有效卡组配置 [Debug: {'; '.join(debug_msg)}]"
+                    return {"text": text_msg, "image_path": None}
+                
+                text_msg += f"\n\n📜 来源: {source_info}"
+                text_msg += "\n🔄 正在转换卡密并生成文件..."
 
-                if not image_path:
-                    text_msg += f"\n\n⚠️ 未生成图片 [Debug: {'; '.join(debug_msg)}]"
+                # 3.1 卡名 -> ID 转换
+                unique_names = list(set(m_list + e_list))
+                tasks = [self.get_card_info(session, name) for name in unique_names]
+                results = await asyncio.gather(*tasks)
+                
+               # ... (前面的 gathering results 不变) ...
 
-                return {"text": text_msg, "image_path": image_path}
+                name_to_id = {}
+                id_to_is_extra = {} # 新增：记录 ID 是否属于额外卡组
+                
+                for name, res in zip(unique_names, results):
+                    # res: (cn_name, card_id, is_extra)
+                    if res[1]: 
+                        name_to_id[name] = res[1]
+                        id_to_is_extra[res[1]] = res[2] # 记录是否为额外
+
+                # 1. 先把所有识别出来的 ID 混在一起
+                raw_m_ids = [name_to_id.get(n) for n in m_list if name_to_id.get(n)]
+                raw_e_ids = [name_to_id.get(n) for n in e_list if name_to_id.get(n)]
+                all_ids = raw_m_ids + raw_e_ids
+                
+                # 2. 重新分配 (二次清洗)
+                m_ids = []
+                e_ids = []
+                
+                for cid in all_ids:
+                    # 如果 API 说是额外(is_extra=True)，就强制塞进额外，不管它原来在哪
+                    if id_to_is_extra.get(cid, False):
+                        e_ids.append(cid)
+                    else:
+                        m_ids.append(cid)
+                # 3.2 保存 YDK
+                ydk_path = self.ydk_manager.save_ydk(m_ids, e_ids, [], session_id)
+                
+                # 3.3 绘图
+                if ydk_path:
+                    text_msg += "\n🎨 正在绘制预览图..."
+                    image_path = await self.ydk_manager.draw_deck_image(session_id, display_name)
+                else:
+                    text_msg += "\n⚠️ YDK 文件生成失败"
+
+                return {"text": text_msg, "image_path": image_path, "ydk_path": ydk_path}
 
         except Exception as e:
+            logger.error(f"DeckBreakdown Error: {e}") # 新增日志
             return {"text": f"Error: {str(e)}"}
