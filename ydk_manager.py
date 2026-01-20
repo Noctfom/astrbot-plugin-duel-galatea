@@ -9,6 +9,7 @@ from astrbot.api.all import logger
 import urllib.parse
 import base64
 import struct
+import random
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -410,3 +411,79 @@ class YDKManager:
             if os.path.isfile(path) and (now - os.path.getmtime(path) > expiration):
                 try: os.remove(path)
                 except: pass
+
+    # [新增功能] 复制 YDK 文件 (用于卡组转存)
+    def copy_ydk_from_session(self, src_session_id: str, target_session_id: str) -> bool:
+        """将源会话的 YDK 复制给目标会话"""
+        src_path = os.path.join(self.cache_dir, f"deck_{src_session_id}.ydk")
+        target_path = os.path.join(self.cache_dir, f"deck_{target_session_id}.ydk")
+
+        if not os.path.exists(src_path):
+            return False
+        
+        try:
+            # 读取源文件
+            with open(src_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            # 写入目标文件
+            with open(target_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            return True
+        except Exception as e:
+            logger.error(f"Copy YDK Error: {e}")
+            return False
+
+    # [新增功能] 通用卡片绘图 (用于起手/抽卡展示)
+    async def draw_cards_image(self, card_ids: List[str], title: str = "Cards") -> Optional[str]:
+        """绘制指定的一组卡片 ID"""
+        if not HAS_PILLOW or not card_ids: return None
+
+        # 1. 下载图片
+        images_cache = {}
+        unique_ids = list(set(card_ids))
+        
+        async with aiohttp.ClientSession() as session:
+            tasks = [self._download_image(session, cid) for cid in unique_ids]
+            results = await asyncio.gather(*tasks)
+            for cid, img in zip(unique_ids, results):
+                if img: images_cache[cid] = img
+
+        if not images_cache: return None
+
+        # 2. 同步绘图逻辑
+        def _sync_draw():
+            try:
+                card_w, card_h, gap = 82, 120, 6
+                # 动态计算画布宽度：最多一行 10 张，或者根据卡片数量自适应
+                cols = min(len(card_ids), 10)
+                rows = (len(card_ids) + cols - 1) // cols
+                
+                total_w = (card_w + gap) * cols + gap
+                total_h = (card_h + gap) * rows + gap + 30 # +30 for title
+                
+                # 黑色背景
+                canvas = Image.new("RGB", (total_w, total_h), (20, 20, 20))
+                draw = ImageDraw.Draw(canvas)
+                
+                # 绘制标题
+                font = self._load_font()
+                draw.text((gap, 5), title, font=font, fill=(255, 255, 255))
+                
+                start_y = 30
+                for i, cid in enumerate(card_ids):
+                    if cid in images_cache:
+                        r = i // cols
+                        c = i % cols
+                        x = gap + c * (card_w + gap)
+                        y = start_y + gap + r * (card_h + gap)
+                        canvas.paste(images_cache[cid], (x, y))
+                
+                output_path = os.path.join(self.images_dir, f"draw_{int(time.time())}_{random.randint(100,999)}.jpg")
+                canvas.save(output_path, quality=90)
+                return output_path
+            except Exception as e:
+                logger.error(f"Draw Cards Error: {e}")
+                return None
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _sync_draw)
