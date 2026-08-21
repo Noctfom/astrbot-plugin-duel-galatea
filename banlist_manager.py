@@ -78,7 +78,7 @@ class BanlistManager:
                 # 1. Session 预热
                 logger.info("Genesys: 正在连接服务器...")
                 try:
-                    async with session.get(main_page_url) as r: await r.read()
+                    async with session.get(main_page_url,ssl=False) as r: await r.read()
                 except: pass
 
                 # 2. 获取总数
@@ -196,7 +196,7 @@ class BanlistManager:
             async with aiohttp.ClientSession(trust_env=True, headers=headers) as session:
                 # 1. 获取列表
                 list_url = f"https://gamekingapi.windoent.com/forbidden/forbbidengroup/webList?type={api_type}"
-                async with session.get(list_url) as resp:
+                async with session.get(list_url, ssl=False) as resp:
                     if resp.status != 200: return False, f"列表请求失败 {resp.status}", []
                     list_data = await resp.json()
                 
@@ -207,7 +207,7 @@ class BanlistManager:
 
                 # 2. 获取详情
                 detail_url = f"https://gamekingapi.windoent.com/forbidden/forbbidengroup/webinfo/{latest_id}"
-                async with session.get(detail_url) as resp:
+                async with session.get(detail_url, ssl=False) as resp:
                     if resp.status != 200: return False, f"详情请求失败 {resp.status}", []
                     detail_data = await resp.json()
 

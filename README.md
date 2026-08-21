@@ -1,6 +1,6 @@
 # Duel Galatea - 游戏王全能插件
 
-![版本](https://img.shields.io/badge/版本-1.4.0-brightgreen)
+![版本](https://img.shields.io/badge/版本-1.4.1-brightgreen)
 ![AstrBot](https://img.shields.io/badge/AstrBot-v4.0+-blue)
 
 ## 🌟 插件简介

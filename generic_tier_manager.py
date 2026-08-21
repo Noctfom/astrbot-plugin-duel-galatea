@@ -103,7 +103,7 @@ class GenericTierManager:
             params = {"search": clean_name}
 
             # 使用 aiohttp 替换 requests
-            async with session.get(search_url, params=params, timeout=10) as response:
+            async with session.get(search_url, params=params, timeout=10, ssl=False) as response:
                 if response.status == 200:
                     data = await response.json()  # <-- 异步读取 JSON
                     results = data.get("result", [])
@@ -490,7 +490,7 @@ class GenericTierManager:
 
         content = ""
         try:
-            async with session.get(url, timeout=15) as response:
+            async with session.get(url, timeout=15, ssl=False) as response:
                 response.raise_for_status()  # 异步检查状态码
                 content = await response.text()  # 异步读取文本内容
         except Exception as e:

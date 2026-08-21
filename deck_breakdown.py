@@ -64,7 +64,7 @@ class DeckBreakdownManager:
         try:
             search_url = "https://ygocdb.com/api/v0/"
             params = {"search": clean_name}
-            async with session.get(search_url, params=params, timeout=5) as response:
+            async with session.get(search_url, params=params, timeout=5, ssl=False) as response:
                 if response.status == 200:
                     data = await response.json()
                     if data.get("result"):
@@ -244,7 +244,7 @@ class DeckBreakdownManager:
                 page_url = f"https://{domain}/tier-list/deck-types/{urllib.parse.quote(deck_slug)}"
                 logger.info(f"Fetching Page: {page_url}")
 
-                async with session.get(page_url, timeout=15) as resp:
+                async with session.get(page_url, timeout=15, ssl=False) as resp:
                     if resp.status == 404:
                         return {"text": f"❌ 未找到卡组: {deck_slug}"}
                     content = await resp.text()
@@ -325,7 +325,7 @@ class DeckBreakdownManager:
                     api_target = f"{api_base}?deckType={variant}&pageSize=1&sort=date"
                     try:
                         logger.info(f"DeckBreakdown: API Try: {api_target}")
-                        async with session.get(api_target, timeout=10) as api_resp:
+                        async with session.get(api_target, timeout=10, ssl=False) as api_resp:
                             if api_resp.status == 200:
                                 data = await api_resp.json()
                                 if data and len(data) > 0:

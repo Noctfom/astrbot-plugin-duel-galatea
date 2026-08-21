@@ -250,7 +250,7 @@ class YDKManager:
         """按 ID 下载图片"""
         url = f"https://cdn.233.momobako.com/ygopro/pics/{card_id}.jpg!thumb2"
         try:
-            async with session.get(url, timeout=10) as resp:
+            async with session.get(url, timeout=10, ssl=False) as resp:
                 if resp.status == 200:
                     data = await resp.read()
                     return Image.open(BytesIO(data))

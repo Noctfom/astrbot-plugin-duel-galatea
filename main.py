@@ -80,7 +80,7 @@ class YugiohCardSearcher:
         """异步搜索卡片"""
         try:
             url = f"{self.base_url}/?search={query}"
-            async with self.session.get(url, timeout=10) as response:
+            async with self.session.get(url, timeout=10, ssl=False) as response:
                 if response.status == 200:
                     # 修复：必须返回解析后的 JSON
                     return await response.json(content_type=None)
@@ -93,7 +93,7 @@ class YugiohCardSearcher:
         """异步获取卡片详情"""
         try:
             url = f"{self.base_url}/card/{card_id}?show=all"
-            async with self.session.get(url, timeout=10) as response:
+            async with self.session.get(url, timeout=10, ssl=False) as response:
                 if response.status == 200:
                     # 修复：必须返回解析后的 JSON
                     return await response.json(content_type=None)
@@ -232,7 +232,7 @@ class YugiohCardSearcher:
         """获取百鸽详情页的 HTML 源码"""
         url = f"https://ygocdb.com/card/{card_id}"
         try:
-            async with self.session.get(url, timeout=10) as response:
+            async with self.session.get(url, timeout=10, ssl=False) as response:
                 if response.status == 200:
                     return await response.text()
         except Exception as e:
@@ -298,7 +298,7 @@ class YugiohCardSearcher:
         return text.strip()
 
 
-@register("duel_galatea", "Noctfom", "游戏王全能插件", "1.4.0")
+@register("duel_galatea", "Noctfom", "游戏王全能插件", "1.4.1")
 class DuelGalateaPlugin(Star):
     def __init__(self, context=None, config: AstrBotConfig = None):
         super().__init__(context, config)
@@ -1476,7 +1476,7 @@ class DuelGalateaPlugin(Star):
         """发送插件功能总览 (全指令收录 v1.4.0)"""
         
         help_text = [
-            "Duel_galatea 游戏王工具箱 v1.4.0",
+            "Duel_galatea 游戏王工具箱 v1.4.1",
             "================================",
             "🔍 **基础查卡**",
             "• `/查卡 <卡名>` : 查询卡片详情、价格、G点及状态",

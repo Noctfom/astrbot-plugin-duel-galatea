@@ -53,7 +53,7 @@ class RotKManager:
 
     async def _fetch_html(self, session, url):
         try:
-            async with session.get(url, timeout=20) as resp:
+            async with session.get(url, timeout=20, ssl=False) as resp:
                 if resp.status == 200:
                     return await resp.text()
         except Exception as e:
@@ -68,7 +68,7 @@ class RotKManager:
             filename = f"ocg_img_{index}.{ext}"
             save_path = os.path.join(self.img_dir, filename)
 
-            async with session.get(url, timeout=15) as resp:
+            async with session.get(url, timeout=15, ssl=False) as resp:
                 if resp.status == 200:
                     data = await resp.read()
                     with open(save_path, "wb") as f:
